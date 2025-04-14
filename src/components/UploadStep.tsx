@@ -1,4 +1,3 @@
-
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChatMessage, Query } from "@/pages/Index";
@@ -70,10 +69,10 @@ const UploadStep = ({ setChatData, setQueryData, chatData, queryData }: UploadSt
 
   const parseQueryCSV = (csv: string) => {
     const lines = csv.split("\n");
-    const headers = lines[0].split(",").map(header => header.trim());
+    const headers = lines[0].split(",").map(header => header.trim().toLowerCase());
     
     // Check if the CSV has the required headers
-    const requiredHeaders = ["Query name", "Query description"];
+    const requiredHeaders = ["query name", "query description"];
     const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
     
     if (missingHeaders.length > 0) {
@@ -103,8 +102,8 @@ const UploadStep = ({ setChatData, setQueryData, chatData, queryData }: UploadSt
       }
       values.push(currentValue); // Don't forget the last value
       
-      const queryNameIndex = headers.indexOf("Query name");
-      const queryDescriptionIndex = headers.indexOf("Query description");
+      const queryNameIndex = headers.indexOf("query name");
+      const queryDescriptionIndex = headers.indexOf("query description");
       
       result.push({
         queryName: values[queryNameIndex].trim().replace(/"/g, ''),
