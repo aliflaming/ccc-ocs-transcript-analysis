@@ -18,10 +18,10 @@ const UploadStep = ({ setChatData, setQueryData, chatData, queryData }: UploadSt
 
   const parseChatCSV = (csv: string) => {
     const lines = csv.split("\n");
-    const headers = lines[0].split(",").map(header => header.trim());
+    const headers = lines[0].split(",").map(header => header.trim().toLowerCase());
     
-    // Check if the CSV has the required headers
-    const requiredHeaders = ["Message Type", "Message Content", "Session ID", "Message date"];
+    // Check if the CSV has the required headers (now case-insensitive)
+    const requiredHeaders = ["message type", "message content", "session id", "message date"];
     const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
     
     if (missingHeaders.length > 0) {
@@ -51,10 +51,11 @@ const UploadStep = ({ setChatData, setQueryData, chatData, queryData }: UploadSt
       }
       values.push(currentValue); // Don't forget the last value
       
-      const messageTypeIndex = headers.indexOf("Message Type");
-      const messageContentIndex = headers.indexOf("Message Content");
-      const sessionIdIndex = headers.indexOf("Session ID");
-      const messageDateIndex = headers.indexOf("Message date");
+      // Use index finding with lowercase headers
+      const messageTypeIndex = headers.indexOf("message type");
+      const messageContentIndex = headers.indexOf("message content");
+      const sessionIdIndex = headers.indexOf("session id");
+      const messageDateIndex = headers.indexOf("message date");
       
       result.push({
         messageType: values[messageTypeIndex].trim().replace(/"/g, ''),
