@@ -29,9 +29,17 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
       }, {} as Record<string, ChatMessage[]>);
 
       // Create a base result object with session IDs
-      const sessionResults: SessionResult[] = Object.keys(sessionGroups).map(sessionId => ({
-        sessionId
-      }));
+      const sessionResults: SessionResult[] = Object.keys(sessionGroups).map(sessionId => {
+        // Find the earliest message date for each session
+        const sessionMessages = sessionGroups[sessionId];
+        const dates = sessionMessages.map(msg => msg.messageDate);
+        const startDate = dates.length > 0 ? dates[0] : '';
+        
+        return {
+          sessionId,
+          "Start date": startDate // Add start date to the results
+        };
+      });
 
       // Process each query using OpenAI
       const processedResults = await Promise.all(
@@ -41,7 +49,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
           
           // Format the conversation for the prompt
           const conversationText = sessionMessages
-            .map(msg => `${msg.messageType}: ${msg.messageContent}`)
+            .map(msg => `${msg.messageType}: ${msg.messageContent} (Date: ${msg.messageDate})`)
             .join("\n");
 
           // Process each query for this session

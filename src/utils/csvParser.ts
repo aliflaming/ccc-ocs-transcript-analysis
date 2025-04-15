@@ -89,11 +89,15 @@ const parseCSVLines = (lines: string[], headers: string[]): ChatMessage[] => {
           return null;
         }
         
+        // Ensure the date is correctly formatted and preserved
+        const rawDate = (values[messageDateIndex] || "").trim().replace(/"/g, '');
+        const messageDate = rawDate;
+        
         return {
           messageType: (values[messageTypeIndex] || "").trim().replace(/"/g, ''),
           messageContent: (values[messageContentIndex] || "").trim().replace(/"/g, ''),
           sessionId: (values[sessionIdIndex] || "").trim().replace(/"/g, ''),
-          messageDate: (values[messageDateIndex] || "").trim().replace(/"/g, '')
+          messageDate: messageDate
         };
       } catch (e) {
         return null;
