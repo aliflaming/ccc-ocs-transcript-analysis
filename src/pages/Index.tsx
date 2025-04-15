@@ -93,7 +93,14 @@ const Index = () => {
               });
 
               if (!response.ok) {
-                throw new Error(`API call failed: ${response.status}`);
+                const errorData = await response.json().catch(() => ({}));
+                const errorMessage = errorData.error?.message || `API call failed: ${response.status}`;
+                
+                if (response.status === 429) {
+                  throw new Error(`OpenAI API rate limit exceeded: ${errorMessage}`);
+                } else {
+                  throw new Error(errorMessage);
+                }
               }
 
               const result = await response.json();
@@ -103,7 +110,12 @@ const Index = () => {
               sessionResult[query.queryName] = queryResult;
             } catch (error) {
               console.error(`Error processing query "${query.queryName}" for session ${sessionId}:`, error);
-              sessionResult[query.queryName] = "Error processing query";
+              sessionResult[query.queryName] = error instanceof Error ? error.message : "Error processing query";
+              
+              // Only show one toast for rate limit errors to avoid spamming
+              if (error instanceof Error && error.message.includes("rate limit") && query === queryData[0]) {
+                toast.error("OpenAI API rate limit exceeded. Please wait a moment and try again, or use a different API key.");
+              }
             }
           }
 
@@ -116,7 +128,8 @@ const Index = () => {
       toast.success("Data processing complete!");
     } catch (error) {
       console.error("Error processing data:", error);
-      toast.error("Error processing data. Check the console for details.");
+      const errorMessage = error instanceof Error ? error.message : "Error processing data";
+      toast.error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
