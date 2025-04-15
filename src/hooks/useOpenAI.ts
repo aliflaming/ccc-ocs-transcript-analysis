@@ -1,3 +1,4 @@
+
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ChatMessage, Query, SessionResult } from '@/pages/Index';
@@ -46,6 +47,11 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
           // Process each query for this session
           for (const query of queryData) {
             try {
+              // Standardize output format instruction
+              const outputFormatInstruction = query.outputFormat?.trim() 
+                ? `${query.outputFormat}` 
+                : "Provide a plain, direct answer with no bullet points, prefixes, or formatting.";
+              
               const response = await fetch("https://api.openai.com/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -57,7 +63,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
                   messages: [
                     {
                       role: "system",
-                      content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${query.queryDescription}". You MUST format your response exactly as specified: ${query.outputFormat}. Do not include any additional text or explanation.`
+                      content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${query.queryDescription}". You MUST format your response exactly as specified: ${outputFormatInstruction}. Do not include any additional text, bullet points, numbers, or prefixes in your response.`
                     },
                     {
                       role: "user",
