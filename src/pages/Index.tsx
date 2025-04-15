@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UploadStep from "@/components/UploadStep";
@@ -17,6 +16,7 @@ export interface ChatMessage {
 export interface Query {
   queryName: string;
   queryDescription: string;
+  outputFormat: string;
 }
 
 export interface SessionResult {

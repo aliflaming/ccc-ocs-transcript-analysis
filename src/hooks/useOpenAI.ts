@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ChatMessage, Query, SessionResult } from '@/pages/Index';
@@ -58,7 +57,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
                   messages: [
                     {
                       role: "system",
-                      content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${query.queryDescription}". Provide a concise response that can be used in a table. If the query asks for a numeric value, just return the number without any text. If it asks for a category or text, provide a very brief response (1-5 words maximum).`
+                      content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${query.queryDescription}". You MUST format your response exactly as specified: ${query.outputFormat}. Do not include any additional text or explanation.`
                     },
                     {
                       role: "user",

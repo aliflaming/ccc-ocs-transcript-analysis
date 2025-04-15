@@ -1,4 +1,3 @@
-
 import { toast } from "sonner";
 import { ChatMessage, Query } from "@/pages/Index";
 
@@ -28,7 +27,7 @@ export const parseQueryCSV = (csv: string): Query[] => {
     const lines = csv.split("\n");
     const headers = lines[0].split(",").map(header => header?.trim()?.toLowerCase() || "");
     
-    const requiredHeaders = ["query name", "query description"];
+    const requiredHeaders = ["query name", "query description", "output format"];
     const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
     
     if (missingHeaders.length > 0) {
@@ -45,15 +44,17 @@ export const parseQueryCSV = (csv: string): Query[] => {
           
           const queryNameIndex = headers.indexOf("query name");
           const queryDescriptionIndex = headers.indexOf("query description");
+          const outputFormatIndex = headers.indexOf("output format");
           
-          if (queryNameIndex < 0 || queryDescriptionIndex < 0 || 
-              queryNameIndex >= values.length || queryDescriptionIndex >= values.length) {
+          if (queryNameIndex < 0 || queryDescriptionIndex < 0 || outputFormatIndex < 0 || 
+              queryNameIndex >= values.length || queryDescriptionIndex >= values.length || outputFormatIndex >= values.length) {
             return null;
           }
           
           return {
             queryName: (values[queryNameIndex] || "").trim().replace(/"/g, ''),
-            queryDescription: (values[queryDescriptionIndex] || "").trim().replace(/"/g, '')
+            queryDescription: (values[queryDescriptionIndex] || "").trim().replace(/"/g, ''),
+            outputFormat: (values[outputFormatIndex] || "").trim().replace(/"/g, '')
           };
         } catch (e) {
           return null;
@@ -65,39 +66,6 @@ export const parseQueryCSV = (csv: string): Query[] => {
     toast.error("Failed to parse query CSV file. Please check the file format.");
     return [];
   }
-};
-
-const parseCSVLines = (lines: string[], headers: string[]): ChatMessage[] => {
-  return lines.slice(1)
-    .filter(line => line.trim())
-    .map(line => {
-      try {
-        const values = parseCSVLine(line);
-        if (!values || values.length <= 1) return null;
-        
-        const messageTypeIndex = headers.indexOf("message type");
-        const messageContentIndex = headers.indexOf("message content");
-        const sessionIdIndex = headers.indexOf("session id");
-        const messageDateIndex = headers.indexOf("message date");
-        
-        if (messageTypeIndex < 0 || messageContentIndex < 0 || 
-            sessionIdIndex < 0 || messageDateIndex < 0 ||
-            messageTypeIndex >= values.length || messageContentIndex >= values.length ||
-            sessionIdIndex >= values.length || messageDateIndex >= values.length) {
-          return null;
-        }
-        
-        return {
-          messageType: (values[messageTypeIndex] || "").trim().replace(/"/g, ''),
-          messageContent: (values[messageContentIndex] || "").trim().replace(/"/g, ''),
-          sessionId: (values[sessionIdIndex] || "").trim().replace(/"/g, ''),
-          messageDate: (values[messageDateIndex] || "").trim().replace(/"/g, '')
-        };
-      } catch (e) {
-        return null;
-      }
-    })
-    .filter((message): message is ChatMessage => message !== null);
 };
 
 const parseCSVLine = (line: string): string[] => {
