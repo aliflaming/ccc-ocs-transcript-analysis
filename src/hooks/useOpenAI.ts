@@ -71,11 +71,15 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
                   messages: [
                     {
                       role: "system",
-                      content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${query.queryDescription}". You MUST format your response exactly as specified: ${outputFormatInstruction}. Do not include any additional text, bullet points, numbers, or prefixes in your response.`
+                      content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${query.queryDescription}". 
+
+IMPORTANT: The session ID for this conversation is "${sessionId}". This is a unique identifier provided in the data and should be preserved exactly as is. Do not generate new session IDs or modify the provided session ID in any way.
+
+You MUST format your response exactly as specified: ${outputFormatInstruction}. Do not include any additional text, bullet points, numbers, or prefixes in your response.`
                     },
                     {
                       role: "user",
-                      content: `Based on the following chat transcript, answer the query "${query.queryDescription}":\n\n${conversationText}`
+                      content: `Based on the following chat transcript for session ID "${sessionId}", answer the query "${query.queryDescription}":\n\n${conversationText}`
                     }
                   ],
                   temperature: 0.1,
