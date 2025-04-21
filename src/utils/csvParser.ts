@@ -89,16 +89,24 @@ const parseCSVLines = (lines: string[], headers: string[]): ChatMessage[] => {
           return null;
         }
         
-        // Ensure the date is correctly formatted and preserved
-        const rawDate = (values[messageDateIndex] || "").trim().replace(/"/g, '');
-        const messageDate = rawDate;
-        
-        return {
+        // Create a base message object with required fields
+        const message: any = {
           messageType: (values[messageTypeIndex] || "").trim().replace(/"/g, ''),
           messageContent: (values[messageContentIndex] || "").trim().replace(/"/g, ''),
           sessionId: (values[sessionIdIndex] || "").trim().replace(/"/g, ''),
-          messageDate: messageDate
+          messageDate: (values[messageDateIndex] || "").trim().replace(/"/g, '')
         };
+        
+        // Add any additional columns found in the header
+        headers.forEach((header, index) => {
+          if (index < values.length && header && 
+              !["message type", "message content", "session id", "message date"].includes(header)) {
+            // Add this custom column to the message object
+            message[header] = (values[index] || "").trim().replace(/"/g, '');
+          }
+        });
+        
+        return message as ChatMessage;
       } catch (e) {
         return null;
       }

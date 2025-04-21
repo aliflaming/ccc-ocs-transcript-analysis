@@ -50,13 +50,58 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
         const sessionId = sessionResult.sessionId;
         const sessionMessages = sessionGroups[sessionId];
         
-        // Format the conversation for the prompt
-        const conversationText = sessionMessages
-          .map(msg => `${msg.messageType}: ${msg.messageContent} (Date: ${msg.messageDate})`)
-          .join("\n");
-
-        // Process each query for this session
+        // Check for direct column extraction queries first
         for (const query of queryData) {
+          // Check if this is a direct column extraction query
+          if (query.queryDescription.toLowerCase().includes("extract column") || 
+              query.queryDescription.toLowerCase().includes("get column") ||
+              query.queryDescription.toLowerCase().includes("pull column") ||
+              query.queryName.toLowerCase().includes("participant identifier") ||
+              query.queryDescription.toLowerCase().includes("participant identifier")) {
+            
+            // Extract column name from query
+            let columnName = "";
+            const matches = query.queryDescription.match(/['"]([^'"]+)['"]/);
+            if (matches && matches[1]) {
+              columnName = matches[1].toLowerCase();
+            } else if (query.queryName.toLowerCase().includes("participant identifier") || 
+                       query.queryDescription.toLowerCase().includes("participant identifier")) {
+              columnName = "participant identifier";
+            }
+            
+            if (columnName) {
+              // Try to find the value directly from the messages
+              for (const message of sessionMessages) {
+                // Check if this message has the specified column as a property
+                const messageKeys = Object.keys(message).map(k => k.toLowerCase());
+                if (messageKeys.includes(columnName) && message[columnName]) {
+                  sessionResult[query.queryName] = message[columnName];
+                  break;
+                } else if (columnName === "participant identifier" && message.messageType) {
+                  // If specifically looking for participant identifier and messageType exists
+                  sessionResult[query.queryName] = message.messageType;
+                  break;
+                }
+              }
+              
+              // If we found a value directly, skip the API call for this query
+              if (sessionResult[query.queryName]) {
+                continue;
+              }
+            }
+          }
+            
+          // Format the conversation for the prompt
+          const conversationText = sessionMessages
+            .map(msg => {
+              // Include all available fields in the conversation text
+              const fields = Object.entries(msg)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join(", ");
+              return fields;
+            })
+            .join("\n");
+
           try {
             // Add delay between API calls to respect rate limits
             if (processedResults.length > 0 || (processedResults.length === 0 && query !== queryData[0])) {
