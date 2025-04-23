@@ -4,7 +4,13 @@ import { ChatMessage, Query } from "@/pages/Index";
 
 export const parseChatCSV = (csv: string): ChatMessage[] => {
   try {
-    const lines = csv.split("\n");
+    // Use faster string processing method for line splitting
+    const lines = csv.trim().split("\n");
+    if (lines.length === 0) {
+      toast.error("Chat CSV file is empty");
+      return [];
+    }
+    
     const headers = lines[0].split(",").map(header => header?.trim()?.toLowerCase() || "");
     
     const requiredHeaders = ["message type", "message content", "session id", "message date", "participant identifier"];
@@ -15,7 +21,13 @@ export const parseChatCSV = (csv: string): ChatMessage[] => {
       return [];
     }
     
-    return parseCSVLines(lines, headers);
+    // Cap the maximum number of messages to process to prevent memory issues
+    const maxMessages = 5000;
+    if (lines.length > maxMessages) {
+      toast.warning(`Processing only the first ${maxMessages} messages to prevent performance issues`);
+    }
+    
+    return parseCSVLines(lines.slice(0, maxMessages + 1), headers);
   } catch (error) {
     console.error("Error parsing chat CSV:", error);
     toast.error("Failed to parse chat CSV file. Please check the file format.");
@@ -25,7 +37,12 @@ export const parseChatCSV = (csv: string): ChatMessage[] => {
 
 export const parseQueryCSV = (csv: string): Query[] => {
   try {
-    const lines = csv.split("\n");
+    const lines = csv.trim().split("\n");
+    if (lines.length === 0) {
+      toast.error("Query CSV file is empty");
+      return [];
+    }
+    
     const headers = lines[0].split(",").map(header => header?.trim()?.toLowerCase() || "");
     
     const requiredHeaders = ["query name", "query description", "output format"];
@@ -36,7 +53,13 @@ export const parseQueryCSV = (csv: string): Query[] => {
       return [];
     }
     
-    return lines.slice(1)
+    // Cap the maximum number of queries to process to prevent memory issues
+    const maxQueries = 50;
+    if (lines.length > maxQueries) {
+      toast.warning(`Processing only the first ${maxQueries} queries to prevent performance issues`);
+    }
+    
+    return lines.slice(1, maxQueries + 1)
       .filter(line => line.trim())
       .map(line => {
         try {
@@ -70,50 +93,60 @@ export const parseQueryCSV = (csv: string): Query[] => {
 };
 
 const parseCSVLines = (lines: string[], headers: string[]): ChatMessage[] => {
-  return lines.slice(1)
-    .filter(line => line.trim())
-    .map(line => {
-      try {
-        const values = parseCSVLine(line);
-        if (!values || values.length <= 1) return null;
-        
-        const messageTypeIndex = headers.indexOf("message type");
-        const messageContentIndex = headers.indexOf("message content");
-        const sessionIdIndex = headers.indexOf("session id");
-        const messageDateIndex = headers.indexOf("message date");
-        const participantIdentifierIndex = headers.indexOf("participant identifier");
-        
-        if (messageTypeIndex < 0 || messageContentIndex < 0 || 
-            sessionIdIndex < 0 || messageDateIndex < 0 || participantIdentifierIndex < 0 ||
-            messageTypeIndex >= values.length || messageContentIndex >= values.length ||
-            sessionIdIndex >= values.length || messageDateIndex >= values.length || 
-            participantIdentifierIndex >= values.length) {
+  // Process in smaller batches to avoid blocking the main thread
+  const batchSize = 500;
+  let result: ChatMessage[] = [];
+  
+  for (let i = 1; i < lines.length; i += batchSize) {
+    const batch = lines.slice(i, i + batchSize)
+      .filter(line => line.trim())
+      .map(line => {
+        try {
+          const values = parseCSVLine(line);
+          if (!values || values.length <= 1) return null;
+          
+          const messageTypeIndex = headers.indexOf("message type");
+          const messageContentIndex = headers.indexOf("message content");
+          const sessionIdIndex = headers.indexOf("session id");
+          const messageDateIndex = headers.indexOf("message date");
+          const participantIdentifierIndex = headers.indexOf("participant identifier");
+          
+          if (messageTypeIndex < 0 || messageContentIndex < 0 || 
+              sessionIdIndex < 0 || messageDateIndex < 0 || participantIdentifierIndex < 0 ||
+              messageTypeIndex >= values.length || messageContentIndex >= values.length ||
+              sessionIdIndex >= values.length || messageDateIndex >= values.length || 
+              participantIdentifierIndex >= values.length) {
+            return null;
+          }
+          
+          // Create a base message object with required fields
+          const message: any = {
+            messageType: (values[messageTypeIndex] || "").trim().replace(/"/g, ''),
+            messageContent: (values[messageContentIndex] || "").trim().replace(/"/g, ''),
+            sessionId: (values[sessionIdIndex] || "").trim().replace(/"/g, ''),
+            messageDate: (values[messageDateIndex] || "").trim().replace(/"/g, ''),
+            participantIdentifier: (values[participantIdentifierIndex] || "").trim().replace(/"/g, '')
+          };
+          
+          // Only add additional columns if they exist and have values to reduce memory usage
+          headers.forEach((header, index) => {
+            if (index < values.length && header && values[index]?.trim() && 
+                !["message type", "message content", "session id", "message date", "participant identifier"].includes(header)) {
+              message[header] = values[index].trim().replace(/"/g, '');
+            }
+          });
+          
+          return message as ChatMessage;
+        } catch (e) {
           return null;
         }
-        
-        // Create a base message object with required fields
-        const message: any = {
-          messageType: (values[messageTypeIndex] || "").trim().replace(/"/g, ''),
-          messageContent: (values[messageContentIndex] || "").trim().replace(/"/g, ''),
-          sessionId: (values[sessionIdIndex] || "").trim().replace(/"/g, ''),
-          messageDate: (values[messageDateIndex] || "").trim().replace(/"/g, ''),
-          participantIdentifier: (values[participantIdentifierIndex] || "").trim().replace(/"/g, '')
-        };
-        
-        // Add any additional columns found in the header
-        headers.forEach((header, index) => {
-          if (index < values.length && header && 
-              !["message type", "message content", "session id", "message date", "participant identifier"].includes(header)) {
-            message[header] = (values[index] || "").trim().replace(/"/g, '');
-          }
-        });
-        
-        return message as ChatMessage;
-      } catch (e) {
-        return null;
-      }
-    })
-    .filter((message): message is ChatMessage => message !== null);
+      })
+      .filter((message): message is ChatMessage => message !== null);
+    
+    result = result.concat(batch);
+  }
+  
+  return result;
 };
 
 const parseCSVLine = (line: string): string[] => {
