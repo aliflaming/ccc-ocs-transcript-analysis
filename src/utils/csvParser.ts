@@ -7,7 +7,7 @@ export const parseChatCSV = (csv: string): ChatMessage[] => {
     const lines = csv.split("\n");
     const headers = lines[0].split(",").map(header => header?.trim()?.toLowerCase() || "");
     
-    const requiredHeaders = ["message type", "message content", "session id", "message date"];
+    const requiredHeaders = ["message type", "message content", "session id", "message date", "participant identifier"];
     const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
     
     if (missingHeaders.length > 0) {
@@ -81,11 +81,13 @@ const parseCSVLines = (lines: string[], headers: string[]): ChatMessage[] => {
         const messageContentIndex = headers.indexOf("message content");
         const sessionIdIndex = headers.indexOf("session id");
         const messageDateIndex = headers.indexOf("message date");
+        const participantIdentifierIndex = headers.indexOf("participant identifier");
         
         if (messageTypeIndex < 0 || messageContentIndex < 0 || 
-            sessionIdIndex < 0 || messageDateIndex < 0 ||
+            sessionIdIndex < 0 || messageDateIndex < 0 || participantIdentifierIndex < 0 ||
             messageTypeIndex >= values.length || messageContentIndex >= values.length ||
-            sessionIdIndex >= values.length || messageDateIndex >= values.length) {
+            sessionIdIndex >= values.length || messageDateIndex >= values.length || 
+            participantIdentifierIndex >= values.length) {
           return null;
         }
         
@@ -94,14 +96,14 @@ const parseCSVLines = (lines: string[], headers: string[]): ChatMessage[] => {
           messageType: (values[messageTypeIndex] || "").trim().replace(/"/g, ''),
           messageContent: (values[messageContentIndex] || "").trim().replace(/"/g, ''),
           sessionId: (values[sessionIdIndex] || "").trim().replace(/"/g, ''),
-          messageDate: (values[messageDateIndex] || "").trim().replace(/"/g, '')
+          messageDate: (values[messageDateIndex] || "").trim().replace(/"/g, ''),
+          participantIdentifier: (values[participantIdentifierIndex] || "").trim().replace(/"/g, '')
         };
         
         // Add any additional columns found in the header
         headers.forEach((header, index) => {
           if (index < values.length && header && 
-              !["message type", "message content", "session id", "message date"].includes(header)) {
-            // Add this custom column to the message object
+              !["message type", "message content", "session id", "message date", "participant identifier"].includes(header)) {
             message[header] = (values[index] || "").trim().replace(/"/g, '');
           }
         });
