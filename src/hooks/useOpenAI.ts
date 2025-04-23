@@ -57,29 +57,40 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
       });
 
       // Limit the number of sessions processed to improve performance
-      const maxSessions = 50; // Reduced from 100 to 50 for better performance
+      const maxSessions = 50;
       const sessionsToProcess = sessionResults.slice(0, maxSessions);
       if (sessionResults.length > maxSessions) {
         toast.warning(`Processing only the first ${maxSessions} sessions to prevent performance issues`);
       }
       
-      // Process each session with increased delay between API calls
+      // Create a queue for tracking active API requests to prevent rate limiting
+      let activeRequests = 0;
+      const maxConcurrentRequests = 3;
+      const maxQueueWaitTime = 10000; // 10 seconds
+      
+      // Process each session
       const processedResults = [];
       let consecutiveApiCalls = 0;
-      const baseDelayMs = 800; // Increased from 500ms to 800ms
+      const baseDelayMs = 800;
       
       for (const sessionResult of sessionsToProcess) {
         const sessionId = sessionResult.sessionId;
         const sessionMessages = sessionGroups[sessionId];
         
-        // For each session, only process a limited number of queries
-        const maxQueriesPerSession = 3; // Limit queries per session
-        const limitedQueries = queryData.slice(0, maxQueriesPerSession);
-        if (queryData.length > maxQueriesPerSession) {
-          toast.warning(`Processing only the first ${maxQueriesPerSession} queries per session for performance`);
-        }
-        
-        for (const query of limitedQueries) {
+        // Process all queries instead of limiting to maxQueriesPerSession
+        const queriesPromises = queryData.map(async (query) => {
+          // Wait for a slot in the concurrency queue
+          const queueStartTime = Date.now();
+          while (activeRequests >= maxConcurrentRequests) {
+            // Check if we've been waiting too long
+            if (Date.now() - queueStartTime > maxQueueWaitTime) {
+              console.warn(`Queue wait timeout for query ${query.queryName}`);
+              return; // Skip this query after timeout
+            }
+            await delay(100); // Short delay to check again
+          }
+          
+          activeRequests++;
           try {
             // First try direct column extraction for specific query types
             if (isColumnExtractionQuery(query)) {
@@ -87,23 +98,21 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
               
               if (columnName && tryDirectColumnExtraction(sessionResult, columnName, sessionMessages, query)) {
                 // If we successfully extracted the column value, continue to next query
-                continue;
+                return;
               }
             }
             
-            // If direct extraction didn't work or wasn't applicable, use OpenAI API
             // Format conversation text with necessary fields only to reduce payload size
             const conversationText = formatConversationTextOptimized(sessionMessages);
             
             // Add adaptive delay between API calls to prevent rate limiting
-            // Increase delay if there have been multiple consecutive calls
-            const currentDelay = baseDelayMs * Math.pow(2, Math.min(consecutiveApiCalls, 4));
+            const currentDelay = baseDelayMs * Math.min(consecutiveApiCalls, 3);
             await delay(currentDelay);
             consecutiveApiCalls++;
             
             // Reset consecutive call counter periodically
-            if (consecutiveApiCalls > 5) { // Reduced from 10 to 5
-              await delay(3000); // Increased from 2000ms to 3000ms
+            if (consecutiveApiCalls > 5) {
+              await delay(1500);
               consecutiveApiCalls = 0;
             }
             
@@ -121,14 +130,19 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
             
             // If we hit a rate limit error, increase the delay significantly and reset counter
             if (error instanceof Error && error.message.includes("rate limit")) {
-              await delay(6000); // Increased from 5000ms to 6000ms
+              await delay(6000);
               consecutiveApiCalls = 0;
             }
+          } finally {
+            activeRequests--;
           }
-        }
+        });
+        
+        // Wait for all queries to complete for this session before moving to next session
+        // This prevents overloading the API with too many concurrent requests
+        await Promise.all(queriesPromises);
         
         processedResults.push(sessionResult);
-        await delay(400); // Increased from 300ms to 400ms
       }
 
       toast.success("Data processing complete!");
@@ -215,7 +229,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
   
   // Helper function to format conversation text with only necessary fields to reduce payload
   const formatConversationTextOptimized = (messages: ChatMessage[]): string => {
-    return messages.slice(0, 30) // Reduced from 50 to 30 messages for performance
+    return messages.slice(0, 30)
       .map(msg => { 
         const essentialFields = [
           `messageType: ${sanitizeString(msg.messageType || '')}`,
@@ -236,7 +250,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
     conversationText: string
   ): Promise<string> => {
     // Truncate conversation text if it's too long
-    const maxConversationLength = 8000; // Reduced from 12000 to 8000 characters
+    const maxConversationLength = 8000;
     const truncatedText = conversationText.length > maxConversationLength
       ? conversationText.substring(0, maxConversationLength) + "... (conversation truncated for performance)"
       : conversationText;
@@ -257,7 +271,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "gpt-3.5-turbo", // Using the most efficient model
+          model: "gpt-3.5-turbo",
           messages: [
             {
               role: "system",
@@ -273,8 +287,8 @@ You MUST format your response exactly as specified: ${outputFormatInstruction}. 
             }
           ],
           temperature: 0.1,
-          max_tokens: 80, // Reduced from 100 to 80 for faster responses
-          timeout: 8000, // Reduced from 10000ms to 8000ms
+          max_tokens: 80
+          // Removed the timeout parameter that was causing the error
         }),
       });
 
@@ -313,7 +327,7 @@ You MUST format your response exactly as specified: ${outputFormatInstruction}. 
       if (error.message.includes("rate limit")) {
         sessionResult[query.queryName] = "API rate limit exceeded";
         toast.error("OpenAI API rate limit exceeded. Retrying with increased delay.", {
-          id: "rate-limit-error", // Use ID to prevent duplicate toasts
+          id: "rate-limit-error",
           duration: 3000,
         });
       } else if (error.message.includes("service unavailable")) {

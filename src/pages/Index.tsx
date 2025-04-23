@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UploadStep from "@/components/UploadStep";
@@ -48,6 +49,10 @@ const Index = () => {
         toast.error("Please enter an OpenAI API key");
         return;
       }
+      
+      // Added a more descriptive toast message for processing
+      toast.info(`Processing ${queryData.length} queries across sessions. This may take some time...`);
+      
       const processedResults = await processData(chatData, queryData);
       if (processedResults) {
         setResults(processedResults);
