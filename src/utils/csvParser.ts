@@ -45,7 +45,7 @@ export const parseQueryCSV = (csv: string): Query[] => {
     
     const headers = lines[0].split(",").map(header => header?.trim()?.toLowerCase() || "");
     
-    const requiredHeaders = ["query name", "query description", "output format"];
+    const requiredHeaders = ["query name", "query description"];
     const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
     
     if (missingHeaders.length > 0) {
@@ -70,15 +70,17 @@ export const parseQueryCSV = (csv: string): Query[] => {
           const queryDescriptionIndex = headers.indexOf("query description");
           const outputFormatIndex = headers.indexOf("output format");
           
-          if (queryNameIndex < 0 || queryDescriptionIndex < 0 || outputFormatIndex < 0 || 
-              queryNameIndex >= values.length || queryDescriptionIndex >= values.length || outputFormatIndex >= values.length) {
+          if (queryNameIndex < 0 || queryDescriptionIndex < 0 || 
+              queryNameIndex >= values.length || queryDescriptionIndex >= values.length) {
             return null;
           }
           
           return {
             queryName: (values[queryNameIndex] || "").trim().replace(/"/g, ''),
             queryDescription: (values[queryDescriptionIndex] || "").trim().replace(/"/g, ''),
-            outputFormat: (values[outputFormatIndex] || "").trim().replace(/"/g, '')
+            ...(outputFormatIndex >= 0 && outputFormatIndex < values.length ? {
+              outputFormat: (values[outputFormatIndex] || "").trim().replace(/"/g, '')
+            } : {})
           };
         } catch (e) {
           return null;
