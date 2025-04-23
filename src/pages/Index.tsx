@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import UploadStep from "@/components/UploadStep";
@@ -11,6 +12,8 @@ export interface ChatMessage {
   messageContent: string;
   sessionId: string;
   messageDate: string;
+  participantIdentifier: string;
+  [key: string]: any; // Allow for additional dynamic properties
 }
 
 export interface Query {
