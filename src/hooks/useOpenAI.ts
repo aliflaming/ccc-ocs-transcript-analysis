@@ -10,6 +10,15 @@ interface UseOpenAIProps {
 // Helper function to add delay between API calls
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Sanitize strings to remove non-ISO-8859-1 characters
+const sanitizeString = (str: string): string => {
+  if (!str) return '';
+  // Replace non-ISO-8859-1 characters with spaces or approximations
+  return str
+    .replace(/[^\x00-\xFF]/g, ' ') // Replace non-ISO-8859-1 chars with space
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ''); // Remove control characters
+};
+
 export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -21,6 +30,9 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
 
     setIsProcessing(true);
     try {
+      // Sanitize API key to ensure it contains only valid characters
+      const sanitizedApiKey = sanitizeString(apiKey);
+      
       // Group chat data by session ID to reduce memory usage and processing time
       const sessionGroups = chatData.reduce((groups, message) => {
         const { sessionId } = message;
@@ -39,13 +51,13 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
         const startDate = dates.length > 0 ? dates[0] : '';
         
         return {
-          sessionId,
-          "Start date": startDate // Add start date to the results
+          sessionId: sanitizeString(sessionId),
+          "Start date": sanitizeString(startDate) // Add start date to the results
         };
       });
 
       // Limit the number of sessions processed to improve performance
-      const maxSessions = 100;
+      const maxSessions = 50; // Reduced from 100 to 50 for better performance
       const sessionsToProcess = sessionResults.slice(0, maxSessions);
       if (sessionResults.length > maxSessions) {
         toast.warning(`Processing only the first ${maxSessions} sessions to prevent performance issues`);
@@ -54,13 +66,20 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
       // Process each session with increased delay between API calls
       const processedResults = [];
       let consecutiveApiCalls = 0;
-      const baseDelayMs = 500; // Start with 500ms delay
+      const baseDelayMs = 800; // Increased from 500ms to 800ms
       
       for (const sessionResult of sessionsToProcess) {
         const sessionId = sessionResult.sessionId;
         const sessionMessages = sessionGroups[sessionId];
         
-        for (const query of queryData) {
+        // For each session, only process a limited number of queries
+        const maxQueriesPerSession = 3; // Limit queries per session
+        const limitedQueries = queryData.slice(0, maxQueriesPerSession);
+        if (queryData.length > maxQueriesPerSession) {
+          toast.warning(`Processing only the first ${maxQueriesPerSession} queries per session for performance`);
+        }
+        
+        for (const query of limitedQueries) {
           try {
             // First try direct column extraction for specific query types
             if (isColumnExtractionQuery(query)) {
@@ -78,19 +97,19 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
             
             // Add adaptive delay between API calls to prevent rate limiting
             // Increase delay if there have been multiple consecutive calls
-            const currentDelay = baseDelayMs * Math.pow(1.5, Math.min(consecutiveApiCalls, 5));
+            const currentDelay = baseDelayMs * Math.pow(2, Math.min(consecutiveApiCalls, 4));
             await delay(currentDelay);
             consecutiveApiCalls++;
             
             // Reset consecutive call counter periodically
-            if (consecutiveApiCalls > 10) {
-              await delay(2000); // Longer cooldown after multiple calls
+            if (consecutiveApiCalls > 5) { // Reduced from 10 to 5
+              await delay(3000); // Increased from 2000ms to 3000ms
               consecutiveApiCalls = 0;
             }
             
             // Call OpenAI API with optimized settings
             const queryResult = await callOpenAIAPI(
-              apiKey, 
+              sanitizedApiKey, 
               sessionId, 
               query, 
               conversationText
@@ -102,14 +121,14 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
             
             // If we hit a rate limit error, increase the delay significantly and reset counter
             if (error instanceof Error && error.message.includes("rate limit")) {
-              await delay(5000); // 5 second delay after rate limit error
+              await delay(6000); // Increased from 5000ms to 6000ms
               consecutiveApiCalls = 0;
             }
           }
         }
         
         processedResults.push(sessionResult);
-        await delay(300); // Add small delay between sessions
+        await delay(400); // Increased from 300ms to 400ms
       }
 
       toast.success("Data processing complete!");
@@ -126,8 +145,8 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
 
   // Helper function to determine if a query is requesting column extraction
   const isColumnExtractionQuery = (query: Query): boolean => {
-    const description = query.queryDescription.toLowerCase();
-    const name = query.queryName.toLowerCase();
+    const description = query.queryDescription?.toLowerCase() || '';
+    const name = query.queryName?.toLowerCase() || '';
     
     return description.includes("extract column") || 
            description.includes("get column") ||
@@ -138,6 +157,8 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
   
   // Helper function to extract column name from query
   const extractColumnName = (query: Query): string => {
+    if (!query.queryDescription) return '';
+    
     // Try to extract column name from quoted text in query description
     const matches = query.queryDescription.match(/['"]([^'"]+)['"]/);
     if (matches && matches[1]) {
@@ -145,8 +166,8 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
     } 
     
     // Special case for participant identifier
-    if (query.queryName.toLowerCase().includes("participant identifier") || 
-        query.queryDescription.toLowerCase().includes("participant identifier")) {
+    if ((query.queryName?.toLowerCase() || '').includes("participant identifier") || 
+        (query.queryDescription?.toLowerCase() || '').includes("participant identifier")) {
       return "participant identifier";
     }
     
@@ -173,7 +194,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
       // Use the first non-empty value from messages
       for (const message of messages) {
         if (message[matchingKey] && message[matchingKey].trim() !== '') {
-          sessionResult[query.queryName] = message[matchingKey];
+          sessionResult[query.queryName] = sanitizeString(message[matchingKey]);
           return true;
         }
       }
@@ -183,7 +204,7 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
     if (columnName === "participant identifier") {
       for (const message of messages) {
         if (message.participantIdentifier && message.participantIdentifier.trim() !== '') {
-          sessionResult[query.queryName] = message.participantIdentifier;
+          sessionResult[query.queryName] = sanitizeString(message.participantIdentifier);
           return true;
         }
       }
@@ -194,16 +215,17 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
   
   // Helper function to format conversation text with only necessary fields to reduce payload
   const formatConversationTextOptimized = (messages: ChatMessage[]): string => {
-    return messages.slice(0, 50).map(msg => { // Limit to first 50 messages
-      const essentialFields = [
-        `messageType: ${msg.messageType || ''}`,
-        `messageContent: ${msg.messageContent || ''}`,
-        `participantIdentifier: ${msg.participantIdentifier || ''}`,
-        `messageDate: ${msg.messageDate || ''}`
-      ];
-      
-      return essentialFields.join(", ");
-    }).join("\n");
+    return messages.slice(0, 30) // Reduced from 50 to 30 messages for performance
+      .map(msg => { 
+        const essentialFields = [
+          `messageType: ${sanitizeString(msg.messageType || '')}`,
+          `messageContent: ${sanitizeString(msg.messageContent || '').substring(0, 200)}`, // Limit length
+          `participantIdentifier: ${sanitizeString(msg.participantIdentifier || '')}`,
+          `messageDate: ${sanitizeString(msg.messageDate || '')}`
+        ];
+        
+        return essentialFields.join(", ");
+      }).join("\n");
   };
   
   // Helper function to call OpenAI API with optimized settings
@@ -214,14 +236,18 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
     conversationText: string
   ): Promise<string> => {
     // Truncate conversation text if it's too long
-    const maxConversationLength = 12000; // Characters
+    const maxConversationLength = 8000; // Reduced from 12000 to 8000 characters
     const truncatedText = conversationText.length > maxConversationLength
       ? conversationText.substring(0, maxConversationLength) + "... (conversation truncated for performance)"
       : conversationText;
     
     const outputFormatInstruction = query.outputFormat?.trim() 
-      ? `${query.outputFormat}` 
+      ? sanitizeString(query.outputFormat)
       : "Provide a plain, direct answer with no bullet points, prefixes, or formatting.";
+    
+    // Sanitize query values to prevent encoding issues
+    const sanitizedQueryDesc = sanitizeString(query.queryDescription || '');
+    const sanitizedSessionId = sanitizeString(sessionId);
     
     try {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -231,24 +257,24 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "gpt-3.5-turbo",
+          model: "gpt-3.5-turbo", // Using the most efficient model
           messages: [
             {
               role: "system",
-              content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${query.queryDescription}". 
+              content: `You are an assistant that analyzes chat transcripts. Your task is to answer the following query about a chat transcript: "${sanitizedQueryDesc}". 
 
-IMPORTANT: The session ID for this conversation is "${sessionId}". This is a unique identifier provided in the data and should be preserved exactly as is. Do not generate new session IDs or modify the provided session ID in any way.
+IMPORTANT: The session ID for this conversation is "${sanitizedSessionId}". This is a unique identifier provided in the data and should be preserved exactly as is. Do not generate new session IDs or modify the provided session ID in any way.
 
 You MUST format your response exactly as specified: ${outputFormatInstruction}. Do not include any additional text, bullet points, numbers, or prefixes in your response.`
             },
             {
               role: "user",
-              content: `Based on the following chat transcript for session ID "${sessionId}", answer the query "${query.queryDescription}":\n\n${truncatedText}`
+              content: `Based on the following chat transcript for session ID "${sanitizedSessionId}", answer the query "${sanitizedQueryDesc}":\n\n${truncatedText}`
             }
           ],
           temperature: 0.1,
-          max_tokens: 100,
-          timeout: 10000, // 10-second timeout for the API call
+          max_tokens: 80, // Reduced from 100 to 80 for faster responses
+          timeout: 8000, // Reduced from 10000ms to 8000ms
         }),
       });
 
@@ -257,16 +283,16 @@ You MUST format your response exactly as specified: ${outputFormatInstruction}. 
         const errorMessage = errorData.error?.message || `API call failed: ${response.status}`;
         
         if (response.status === 429) {
-          throw new Error(`OpenAI API rate limit exceeded: ${errorMessage}`);
+          throw new Error(`OpenAI API rate limit exceeded: ${sanitizeString(errorMessage)}`);
         } else if (response.status === 503 || response.status === 504) {
-          throw new Error(`OpenAI API service unavailable: ${errorMessage}`);
+          throw new Error(`OpenAI API service unavailable: ${sanitizeString(errorMessage)}`);
         } else {
-          throw new Error(errorMessage);
+          throw new Error(sanitizeString(errorMessage));
         }
       }
 
       const result = await response.json();
-      return result.choices[0].message.content.trim();
+      return sanitizeString(result.choices[0].message.content.trim());
     } catch (error) {
       console.error("API call error:", error);
       throw error;
@@ -293,7 +319,7 @@ You MUST format your response exactly as specified: ${outputFormatInstruction}. 
       } else if (error.message.includes("service unavailable")) {
         sessionResult[query.queryName] = "API service unavailable";
       } else {
-        sessionResult[query.queryName] = "Error: " + error.message.substring(0, 50);
+        sessionResult[query.queryName] = "Error: " + sanitizeString(error.message.substring(0, 50));
       }
     } else {
       sessionResult[query.queryName] = "Unknown error";
