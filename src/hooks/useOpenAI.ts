@@ -56,9 +56,6 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
         };
       });
       
-      // Detect and translate non-English messages
-      const nonEnglishSessions = await detectAndProcessNonEnglishMessages(sessionGroups, sanitizedApiKey);
-      
       // Create a queue for tracking active API requests to prevent rate limiting
       let activeRequests = 0;
       const maxConcurrentRequests = 3;
@@ -138,16 +135,11 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
         // This prevents overloading the API with too many concurrent requests
         await Promise.all(queriesPromises);
         
-        // Add translation data if available
-        if (nonEnglishSessions[sessionId]) {
-          sessionResult["HasNonEnglishContent"] = "Yes";
-        }
-        
         processedResults.push(sessionResult);
       }
 
       toast.success("Data processing complete!");
-      return { results: processedResults, translations: nonEnglishSessions };
+      return processedResults;
     } catch (error) {
       console.error("Error processing data:", error);
       const errorMessage = error instanceof Error ? error.message : "Error processing data";
@@ -156,119 +148,6 @@ export const useOpenAI = ({ apiKey }: UseOpenAIProps) => {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  // New function to detect and process non-English messages
-  const detectAndProcessNonEnglishMessages = async (
-    sessionGroups: Record<string, ChatMessage[]>,
-    apiKey: string
-  ): Promise<Record<string, {originalMessages: ChatMessage[], translatedMessages: ChatMessage[]}>> => {
-    const nonEnglishSessions: Record<string, {originalMessages: ChatMessage[], translatedMessages: ChatMessage[]}> = {};
-    
-    // Use English language detection to minimize API calls
-    const languageDetectionPrompt = "Respond with ONLY 'yes' if ANY of the following messages are NOT in English. Otherwise respond with ONLY 'no'.";
-    
-    // Process each session to detect non-English content
-    for (const [sessionId, messages] of Object.entries(sessionGroups)) {
-      try {
-        // Sample messages to check for non-English content (to minimize API calls)
-        const messageSamples = messages
-          .filter(msg => msg.messageContent && msg.messageContent.trim().length > 5)
-          .slice(0, 5) // Check only first 5 substantive messages
-          .map(msg => sanitizeString(msg.messageContent).substring(0, 100)) // Limit length for efficiency
-          .join("\n\n");
-        
-        if (!messageSamples) continue; // Skip if no substantive messages
-        
-        const isNonEnglish = await callOpenAIAPI(
-          apiKey,
-          sessionId,
-          { queryName: "LanguageDetection", queryDescription: languageDetectionPrompt },
-          messageSamples
-        );
-        
-        if (isNonEnglish.toLowerCase() === 'yes') {
-          // Only process sessions with non-English content
-          const originalMessages = messages.filter(msg => msg.messageContent && msg.messageContent.trim());
-          const translatedMessages = await translateSessionMessages(originalMessages, apiKey);
-          
-          nonEnglishSessions[sessionId] = {
-            originalMessages,
-            translatedMessages
-          };
-        }
-      } catch (error) {
-        console.error(`Error detecting language for session ${sessionId}:`, error);
-        // Continue with other sessions even if language detection fails for one
-      }
-    }
-    
-    return nonEnglishSessions;
-  };
-  
-  // Helper function to translate messages
-  const translateSessionMessages = async (
-    messages: ChatMessage[],
-    apiKey: string
-  ): Promise<ChatMessage[]> => {
-    const translatedMessages: ChatMessage[] = [];
-    const batchSize = 5; // Process messages in small batches to reduce API calls
-    
-    // Process messages in batches
-    for (let i = 0; i < messages.length; i += batchSize) {
-      const batch = messages.slice(i, i + batchSize);
-      const batchContent = batch
-        .map((msg, idx) => `Message ${i + idx + 1}: ${sanitizeString(msg.messageContent)}`)
-        .join("\n\n");
-      
-      try {
-        // Simple translation prompt
-        const translationPrompt = "Translate the following messages to English if they are not already in English. If a message is already in English, just repeat it exactly without changes. Format your response as:\n\nMessage 1: [translation]\nMessage 2: [translation]\n...";
-        
-        const translationResult = await callOpenAIAPI(
-          apiKey,
-          "translation",
-          { queryName: "Translation", queryDescription: translationPrompt },
-          batchContent
-        );
-        
-        // Parse translation results
-        const translationLines = translationResult.split('\n');
-        let currentIndex = 0;
-        
-        for (let j = 0; j < batch.length; j++) {
-          const originalMessage = batch[j];
-          let translatedContent = originalMessage.messageContent; // Default to original
-          
-          // Find the corresponding translation line
-          while (currentIndex < translationLines.length) {
-            const line = translationLines[currentIndex++];
-            const match = line.match(/^Message\s+\d+:\s+(.*)/i);
-            
-            if (match) {
-              translatedContent = match[1];
-              break;
-            }
-          }
-          
-          translatedMessages.push({
-            ...originalMessage,
-            translatedContent
-          });
-        }
-        
-        // Add a delay between batches to avoid rate limiting
-        if (i + batchSize < messages.length) {
-          await delay(1000);
-        }
-      } catch (error) {
-        console.error("Translation error:", error);
-        // If translation fails, add original messages
-        batch.forEach(msg => translatedMessages.push({...msg}));
-      }
-    }
-    
-    return translatedMessages;
   };
 
   // Helper function to determine if a query is requesting column extraction
