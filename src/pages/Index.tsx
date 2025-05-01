@@ -13,6 +13,7 @@ export interface ChatMessage {
   sessionId: string;
   messageDate: string;
   participantIdentifier: string;
+  translatedContent?: string; // Add translated content field
   [key: string]: any; // Allow for additional dynamic properties
 }
 
@@ -27,12 +28,20 @@ export interface SessionResult {
   [key: string]: any;
 }
 
+export interface TranslationData {
+  [sessionId: string]: {
+    originalMessages: ChatMessage[];
+    translatedMessages: ChatMessage[];
+  }
+}
+
 const Index = () => {
   const [activeTab, setActiveTab] = useState("upload");
   const [apiKey, setApiKey] = useState("");
   const [chatData, setChatData] = useState<ChatMessage[]>([]);
   const [queryData, setQueryData] = useState<Query[]>([]);
   const [results, setResults] = useState<SessionResult[]>([]);
+  const [translationData, setTranslationData] = useState<TranslationData>({});
   
   const { isProcessing, processData } = useOpenAI({ apiKey });
 
@@ -53,9 +62,10 @@ const Index = () => {
       // Added a more descriptive toast message for processing
       toast.info(`Processing ${queryData.length} queries across sessions. This may take some time...`);
       
-      const processedResults = await processData(chatData, queryData);
-      if (processedResults) {
-        setResults(processedResults);
+      const processedData = await processData(chatData, queryData);
+      if (processedData) {
+        setResults(processedData.results);
+        setTranslationData(processedData.translations || {});
         setActiveTab("results");
       }
     }
@@ -93,7 +103,7 @@ const Index = () => {
             </TabsContent>
 
             <TabsContent value="results">
-              <ResultsStep results={results} />
+              <ResultsStep results={results} translationData={translationData} />
             </TabsContent>
 
             {activeTab !== "results" && (
