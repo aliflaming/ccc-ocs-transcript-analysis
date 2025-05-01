@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SessionResult, TranslationData } from "@/pages/Index";
-import { Download, Search, Language } from "lucide-react";
+import { Download, Search, Languages } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ResultsStepProps {
@@ -82,7 +82,7 @@ const ResultsStep = ({ results, translationData = {} }: ResultsStepProps) => {
   const downloadTranslationsCsv = () => {
     if (!hasTranslations) return;
 
-    const headers = ["Session ID", "Message Date", "Participant", "Original Content", "Translated Content"];
+    const headers = ["Session ID", "Message Date", "Participant", "Original Message", "English Translation"];
     
     // Flatten translations into rows
     const rows: string[][] = [];
@@ -128,7 +128,7 @@ const ResultsStep = ({ results, translationData = {} }: ResultsStepProps) => {
           <TabsTrigger value="results">Analysis Results</TabsTrigger>
           {hasTranslations && (
             <TabsTrigger value="translations">
-              <Language className="h-4 w-4 mr-1" />
+              <Languages className="h-4 w-4 mr-1" />
               Translations ({sessionsWithTranslations})
             </TabsTrigger>
           )}
